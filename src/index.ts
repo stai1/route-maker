@@ -2,7 +2,7 @@ import 'ol/ol.css';
 import { OSM } from 'ol/source';
 import { Map, View, Feature, MapBrowserEvent } from 'ol';
 import { MousePosition, ScaleLine, ZoomToExtent, defaults } from 'ol/control';
-import { Coordinate } from 'ol/coordinate';
+import { Coordinate, createStringXY } from 'ol/coordinate';
 import { Geometry, LineString, Point } from 'ol/geom'
 import { Tile , Vector } from 'ol/layer';
 import VectorSource from 'ol/source/Vector';
@@ -70,7 +70,10 @@ export class RunPatcher {
     this.map = new Map({
       target: 'map',
       controls: defaults().extend([
-        new MousePosition(),
+        new MousePosition({
+          coordinateFormat: createStringXY(5),
+          projection: 'EPSG:4326',
+        }),
         new ScaleLine(),
         new ZoomToExtent(),
       ]),
