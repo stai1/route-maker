@@ -1,0 +1,21 @@
+{
+  "name": "route-maker",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "parcel serve src/index.html",
+    "build": "parcel build --public-url . src/index.html"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "parcel": "^2.0.0-rc.0",
+    "typescript": "^4.4.2"
+  },
+  "dependencies": {
+    "@types/ol": "^6.5.3",
+    "ol": "^6.6.1"
+  },
+  "browserslist": "defaults"
+}
