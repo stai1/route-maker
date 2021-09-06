@@ -7,6 +7,7 @@ import { Geometry, LineString, Point } from 'ol/geom'
 import { Tile , Vector } from 'ol/layer';
 import VectorSource from 'ol/source/Vector';
 import { fromLonLat, toLonLat } from 'ol/proj';
+import { getDistance } from 'ol/sphere';
 import { Style, Stroke, Circle, Fill} from 'ol/style';
 
 interface MapDataPoint {
@@ -16,6 +17,7 @@ interface MapDataPoint {
 
 interface DataPoint {
   distance: number;
+  totalDistance: number;
 }
 
 const PATCH_LINE_STYLE = new Style({
@@ -142,9 +144,7 @@ export class RunPatcher {
         pointerdrag: (e: MapBrowserEvent<MouseEvent>) => {
           if(this.draggingPointIndex != null) {
             e.stopPropagation();
-            this.patchPoints[this.draggingPointIndex].point = new Point(e.coordinate);
-            this.setPatchPath(this.patchPoints);
-            this.setPreviousPointStyle();
+            this.moveDraggingPoint(e.coordinate);
           }
         }
       }
@@ -183,32 +183,104 @@ export class RunPatcher {
     );
   }
 
-  private addPoint(coordinate: Coordinate) {
+  /**
+   * Update the total distances of points from a starting index. Assumes that `distance` is correct for all data
+   * @param index the index of the last point with a correct `totalDistance`
+   */
+  private updateTotalDistances(index: number) {
+    for(let i = index + 1; i < this.patchPoints.length; ++i) {
+      const dataPoint = this.patchPoints[i].data;
+      dataPoint.totalDistance = (this.patchPoints[i-1]?.data.totalDistance || 0) + dataPoint.distance;
+    }
+  }
+
+  /**
+   * Add a point at `previousPointIndex` at a location
+   * @param coordinate 
+   * @param render whether to render the path update
+   */
+  private addPoint(coordinate: Coordinate, render = true) {
     let point = new Point(coordinate);
+    let distance = 0;
+    let totalDistance = 0;
+
+    let nextPointDistance: number;
+    if(this.previousPointIndex !== -1) {
+      const mapDataPoint = this.patchPoints[this.previousPointIndex];
+      distance = getDistance(toLonLat(mapDataPoint.point.getCoordinates()), toLonLat(coordinate));
+      totalDistance = mapDataPoint.data.totalDistance + distance;
+
+      if(this.previousPointIndex < this.patchPoints.length - 1) {
+        nextPointDistance = getDistance(toLonLat(coordinate), toLonLat(this.patchPoints[this.previousPointIndex+1].point.getCoordinates()));
+        this.patchPoints[this.previousPointIndex+1].data.distance = nextPointDistance;
+      }
+    }
     this.patchPoints.splice(this.previousPointIndex + 1, 0,
       { 
         point: point, 
-        data: { distance: 0 }
+        data: {
+          distance: distance,
+          totalDistance: totalDistance
+        }
       }
     );
-    this.setPatchPath(this.patchPoints);
     this.previousPointIndex += 1;
-    this.setPreviousPointStyle();
+    this.updateTotalDistances(this.previousPointIndex);
+    if(render) {
+      this.setPatchPath(this.patchPoints);
+      this.setPreviousPointStyle();
+    }
   }
 
-  private removePreviousPoint() {
+  /**
+   * Remove a point at `previousPointIndex`
+   * @param render whether to render the path update
+   */
+  private removePreviousPoint(render = true) {
     if(this.previousPointIndex > 0) {
       this.patchPoints.splice(this.previousPointIndex, 1);
-      this.setPatchPath(this.patchPoints);
+      const mapDataPoint = this.patchPoints[this.previousPointIndex];
+      if(this.previousPointIndex < this.patchPoints.length) {
+        mapDataPoint.data.distance = getDistance(toLonLat(this.patchPoints[this.previousPointIndex-1].point.getCoordinates()), toLonLat(mapDataPoint.point.getCoordinates()));
+      }
       this.previousPointIndex -= 1;
-      this.setPreviousPointStyle();
+      this.updateTotalDistances(this.previousPointIndex);
     }
     else if(this.previousPointIndex === 0) {
       this.patchPoints.shift();
       if(!this.patchPoints.length) {
         this.previousPointIndex = -1;
       }
-      console.log(this.previousPointIndex);
+      else {
+        this.patchPoints[this.previousPointIndex].data.distance = 0;
+        this.updateTotalDistances(-1);
+      }
+    }
+    if(render) {
+      this.setPatchPath(this.patchPoints);
+      this.setPreviousPointStyle();
+    }
+  }
+
+  /**
+   * Move the point at `draggingPointIndex` to a new location
+   * @param coordinate 
+   * @param render whether to render the path update
+   */
+  private moveDraggingPoint(coordinate: Coordinate, render = true) {
+    const mapDataPoint = this.patchPoints[this.draggingPointIndex];
+    mapDataPoint.point.setCoordinates(coordinate);
+    if(this.draggingPointIndex !== 0) {
+      const previousMapDataPoint = this.patchPoints[this.draggingPointIndex-1]
+      mapDataPoint.data.distance = getDistance(toLonLat(previousMapDataPoint.point.getCoordinates()), toLonLat(coordinate));
+      mapDataPoint.data.totalDistance = previousMapDataPoint.data.totalDistance + mapDataPoint.data.distance;
+    }
+    if(this.draggingPointIndex < this.patchPoints.length - 1) {
+      const nextMapDataPoint = this.patchPoints[this.draggingPointIndex+1];
+      nextMapDataPoint.data.distance = getDistance(toLonLat(mapDataPoint.point.getCoordinates()), toLonLat(nextMapDataPoint.point.getCoordinates()));
+    }
+    this.updateTotalDistances(this.draggingPointIndex);
+    if(render) {
       this.setPatchPath(this.patchPoints);
       this.setPreviousPointStyle();
     }
