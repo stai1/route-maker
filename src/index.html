@@ -11,6 +11,14 @@
       <div class="side">
         <div>Distance (km): <span id="distance-km"></span></div>
         <div>Distance (miles): <span id="distance-miles"></span></div>
+        <div>
+          <h2>Export options</h2>
+          <form id="export" onsubmit="return false;">
+            <div>Route name: <input name="name"></div>
+            <div>Add bogus time<input name="bogus-time" type="checkbox"></div>
+            <div><button type="submit">Export</button><a id="download" style="display: none"></a></div>
+          </form>
+        </div>
       </div>
     </div>
   </body>

@@ -10,6 +10,11 @@ import { fromLonLat, toLonLat } from 'ol/proj';
 import { getDistance } from 'ol/sphere';
 import { Style, Stroke, Circle, Fill} from 'ol/style';
 
+interface ExportOptions {
+  name: string;
+  bogusTime: boolean;
+}
+
 interface MapDataPoint {
   point: Point;
   data: DataPoint;
@@ -331,6 +336,56 @@ export class RunPatcher {
     return true;
   }
 
+  public createGPX(options: ExportOptions): string {
+    const timeRegex = /(.*)\..*?Z/;
+
+    const xmlDoc = document.implementation.createDocument(null, 'gpx', null);
+    const gpxElement: Element = xmlDoc.documentElement;
+    let time = new Date();
+    time.setMilliseconds(0);
+    if(options.bogusTime) {
+      gpxElement
+        .appendChild(xmlDoc.createElement('metadata'))
+        .appendChild(xmlDoc.createElement('time'))
+        .textContent = time.toISOString().match(timeRegex)[1]+'Z';
+    }
+    const trkElement: Element = gpxElement.appendChild(xmlDoc.createElement('trk'));
+    trkElement.appendChild(xmlDoc.createElement('name')).textContent = options.name;
+    if(options.bogusTime) {
+      trkElement.appendChild(xmlDoc.createElement('type')).textContent = '9';
+    }
+    const trksegElement: Element = trkElement.appendChild(xmlDoc.createElement('trkseg'));
+    for(const mapDataPoint of this.patchPoints) {
+      const trkptElement: Element = trksegElement.appendChild(xmlDoc.createElement('trkpt'));
+      const coordinates = toLonLat(mapDataPoint.point.getCoordinates());
+      trkptElement.setAttribute('lat', coordinates[1].toString());
+      trkptElement.setAttribute('lon', coordinates[0].toString());
+      if(options.bogusTime) {
+        const seconds = Math.ceil(mapDataPoint.data.distance); // at most 1 m/s
+        time = new Date(time.getTime() + seconds*1000);
+        trkptElement.appendChild(xmlDoc.createElement('time'))
+          .textContent = time.toISOString().match(timeRegex)[1]+'Z';
+      }
+    }
+    return '<?xml version="1.0" encoding="UTF-8"?>' + new XMLSerializer().serializeToString(xmlDoc);
+  }
+
 }
 
 const app = new RunPatcher();
+
+const formElement = document.getElementById('export') as HTMLFormElement;
+formElement.addEventListener('submit', (ev: Event) => {
+  const options = {
+    bogusTime: formElement.elements['bogus-time'].checked as boolean,
+    name: formElement.elements['name'].value as string,
+  };
+  console.log(options);
+
+  const blob = new Blob([app.createGPX(options)], {type: "octet/stream"});
+
+  const downloadElement = document.getElementById('download') as HTMLAnchorElement;
+  downloadElement.href = window.URL.createObjectURL(blob);
+  downloadElement.download = (options.name || 'route') + '.gpx';
+  downloadElement.click();
+});
