@@ -25,13 +25,13 @@ interface DataPoint {
   totalDistance: number;
 }
 
-const PATCH_LINE_STYLE = new Style({
+const EDITOR_LINE_STYLE = new Style({
   stroke: new Stroke({
     color: '#ff0000',
     width:3
   })
 });
-const PATCH_POINTS_STYLE = new Style({
+const EDITOR_POINTS_STYLE = new Style({
   image: new Circle({
     radius:5,
     fill: new Fill({
@@ -43,7 +43,7 @@ const PATCH_POINTS_STYLE = new Style({
     })
   })
 });
-const PATCH_POINTS_PREVIOUS_STYLE = new Style({
+const EDITOR_POINTS_PREVIOUS_STYLE = new Style({
   image: new Circle({
     radius:5,
     fill: new Fill({
@@ -55,16 +55,16 @@ const PATCH_POINTS_PREVIOUS_STYLE = new Style({
     })
   })
 });
-export class RunPatcher {
+export class RouteMaker {
 
   routeLayerSource = new VectorSource({wrapX: true});
   selectedLayerSource = new VectorSource({wrapX: true});
-  patchLineLayerSource = new VectorSource({wrapX: true});
-  patchPointsLayerSource = new VectorSource({wrapX: true});
+  editorLineLayerSource = new VectorSource({wrapX: true});
+  editorPointsLayerSource = new VectorSource({wrapX: true});
 
 
-  patchLineFeature: Feature<LineString> = new Feature<LineString>({geometry: new LineString([])});
-  patchPoints: MapDataPoint[];
+  editorLineFeature: Feature<LineString> = new Feature<LineString>({geometry: new LineString([])});
+  editorPoints: MapDataPoint[];
   previousPointIndex: number;
 
   draggingPointIndex: number;
@@ -88,25 +88,25 @@ export class RunPatcher {
         new Tile({source: mapSource}),
         new Vector({ source: this.routeLayerSource}),
         new Vector({ source: this.selectedLayerSource}),
-        new Vector({ source: this.patchLineLayerSource}),
-        new Vector({ source: this.patchPointsLayerSource})
+        new Vector({ source: this.editorLineLayerSource}),
+        new Vector({ source: this.editorPointsLayerSource})
       ],
       view: new View({
         center: fromLonLat([-121.961, 37.55]),
         zoom: 16,
       }),
     });
-    this.patchLineFeature.setStyle(PATCH_LINE_STYLE);
-    this.patchLineLayerSource.addFeature(this.patchLineFeature);
+    this.editorLineFeature.setStyle(EDITOR_LINE_STYLE);
+    this.editorLineLayerSource.addFeature(this.editorLineFeature);
 
-    this.resetPatcher();
-    this.initPatcher();
+    this.resetEditor();
+    this.initEditor();
 
     this.setInteractions();
   }
 
-  private resetPatcher() {
-    this.patchPoints = [];
+  private resetEditor() {
+    this.editorPoints = [];
     this.previousPointIndex = null;
     this.draggingPointIndex = null;
     this.updateDisplay();
@@ -114,12 +114,12 @@ export class RunPatcher {
 
   private setInteractions() {
     let controlInteractions = {
-      patcher: {
+      editor: {
         click: (e: MapBrowserEvent<MouseEvent>) => {
           let coordinate = e.coordinate;
           if(e.originalEvent.ctrlKey) {
             this.map.forEachFeatureAtPixel(e.pixel, (f) => {
-              if(this.patchPointsLayerSource.hasFeature(f as Feature<Geometry>)) {
+              if(this.editorPointsLayerSource.hasFeature(f as Feature<Geometry>)) {
                 coordinate = (<Point> f.getGeometry()).getCoordinates();
                 return true;
               }
@@ -136,8 +136,8 @@ export class RunPatcher {
         pointerdown: (e: MapBrowserEvent<MouseEvent>) => {
           if(!e.originalEvent.ctrlKey) { // ctrlKey to allow adding point on another point
             this.map.forEachFeatureAtPixel(e.pixel, (f) => {
-              if(this.patchPointsLayerSource.hasFeature(f as Feature<Geometry>)) {
-                this.previousPointIndex = this.patchPoints.findIndex(item => item.point === <Point> f.getGeometry());
+              if(this.editorPointsLayerSource.hasFeature(f as Feature<Geometry>)) {
+                this.previousPointIndex = this.editorPoints.findIndex(item => item.point === <Point> f.getGeometry());
                 this.draggingPointIndex = this.previousPointIndex;
                 this.setPreviousPointStyle();
                 return true;
@@ -157,7 +157,7 @@ export class RunPatcher {
             let coordinate = e.coordinate;
             if(e.originalEvent.ctrlKey) {
               this.map.forEachFeatureAtPixel(e.pixel, (f) => {
-                if(this.patchPointsLayerSource.hasFeature(f as Feature<Geometry>) && <Point> f.getGeometry() !== this.patchPoints[this.draggingPointIndex].point) {
+                if(this.editorPointsLayerSource.hasFeature(f as Feature<Geometry>) && <Point> f.getGeometry() !== this.editorPoints[this.draggingPointIndex].point) {
                   coordinate = (<Point> f.getGeometry()).getCoordinates();
                   return true;
                 }
@@ -169,23 +169,23 @@ export class RunPatcher {
       }
     }
     this.map.on('click', (e: MapBrowserEvent<MouseEvent>) => {
-      controlInteractions.patcher.click?.(e);
+      controlInteractions.editor.click?.(e);
     });
     this.map.on('dblclick', (e: MapBrowserEvent<MouseEvent>) => {
-      controlInteractions.patcher.dblclick?.(e);
+      controlInteractions.editor.dblclick?.(e);
     });
     this.map.on(<any> 'contextmenu', (e: MapBrowserEvent<MouseEvent>) => {
       e.preventDefault();
-      controlInteractions.patcher.rightclick?.(e);
+      controlInteractions.editor.rightclick?.(e);
     });
     this.map.on(<any> 'pointerdown', (e: MapBrowserEvent<MouseEvent>) => {
-      controlInteractions.patcher.pointerdown?.(e);
+      controlInteractions.editor.pointerdown?.(e);
     });
     this.map.on(<any> 'pointerup', (e: MapBrowserEvent<MouseEvent>) => {
-      controlInteractions.patcher.pointerup?.(e);
+      controlInteractions.editor.pointerup?.(e);
     });
     this.map.on('pointerdrag', (e: MapBrowserEvent<MouseEvent>) => {
-      controlInteractions.patcher.pointerdrag?.(e);
+      controlInteractions.editor.pointerdrag?.(e);
     });
   }
 
@@ -194,9 +194,9 @@ export class RunPatcher {
    * @param index the index of the last point with a correct `totalDistance`
    */
   private updateTotalDistances(index: number) {
-    for(let i = index + 1; i < this.patchPoints.length; ++i) {
-      const dataPoint = this.patchPoints[i].data;
-      dataPoint.totalDistance = (this.patchPoints[i-1]?.data.totalDistance || 0) + dataPoint.distance;
+    for(let i = index + 1; i < this.editorPoints.length; ++i) {
+      const dataPoint = this.editorPoints[i].data;
+      dataPoint.totalDistance = (this.editorPoints[i-1]?.data.totalDistance || 0) + dataPoint.distance;
     }
   }
 
@@ -212,16 +212,16 @@ export class RunPatcher {
 
     let nextPointDistance: number;
     if(this.previousPointIndex !== -1) {
-      const mapDataPoint = this.patchPoints[this.previousPointIndex];
+      const mapDataPoint = this.editorPoints[this.previousPointIndex];
       distance = getDistance(toLonLat(mapDataPoint.point.getCoordinates()), toLonLat(coordinate));
       totalDistance = mapDataPoint.data.totalDistance + distance;
 
-      if(this.previousPointIndex < this.patchPoints.length - 1) {
-        nextPointDistance = getDistance(toLonLat(coordinate), toLonLat(this.patchPoints[this.previousPointIndex+1].point.getCoordinates()));
-        this.patchPoints[this.previousPointIndex+1].data.distance = nextPointDistance;
+      if(this.previousPointIndex < this.editorPoints.length - 1) {
+        nextPointDistance = getDistance(toLonLat(coordinate), toLonLat(this.editorPoints[this.previousPointIndex+1].point.getCoordinates()));
+        this.editorPoints[this.previousPointIndex+1].data.distance = nextPointDistance;
       }
     }
-    this.patchPoints.splice(this.previousPointIndex + 1, 0,
+    this.editorPoints.splice(this.previousPointIndex + 1, 0,
       { 
         point: point, 
         data: {
@@ -243,21 +243,21 @@ export class RunPatcher {
    */
   private removePreviousPoint(render = true) {
     if(this.previousPointIndex > 0) {
-      this.patchPoints.splice(this.previousPointIndex, 1);
-      const mapDataPoint = this.patchPoints[this.previousPointIndex];
-      if(this.previousPointIndex < this.patchPoints.length) {
-        mapDataPoint.data.distance = getDistance(toLonLat(this.patchPoints[this.previousPointIndex-1].point.getCoordinates()), toLonLat(mapDataPoint.point.getCoordinates()));
+      this.editorPoints.splice(this.previousPointIndex, 1);
+      const mapDataPoint = this.editorPoints[this.previousPointIndex];
+      if(this.previousPointIndex < this.editorPoints.length) {
+        mapDataPoint.data.distance = getDistance(toLonLat(this.editorPoints[this.previousPointIndex-1].point.getCoordinates()), toLonLat(mapDataPoint.point.getCoordinates()));
       }
       this.previousPointIndex -= 1;
       this.updateTotalDistances(this.previousPointIndex);
     }
     else if(this.previousPointIndex === 0) {
-      this.patchPoints.shift();
-      if(!this.patchPoints.length) {
+      this.editorPoints.shift();
+      if(!this.editorPoints.length) {
         this.previousPointIndex = -1;
       }
       else {
-        this.patchPoints[this.previousPointIndex].data.distance = 0;
+        this.editorPoints[this.previousPointIndex].data.distance = 0;
         this.updateTotalDistances(-1);
       }
     }
@@ -272,15 +272,15 @@ export class RunPatcher {
    * @param render whether to render the path update
    */
   private moveDraggingPoint(coordinate: Coordinate, render = true) {
-    const mapDataPoint = this.patchPoints[this.draggingPointIndex];
+    const mapDataPoint = this.editorPoints[this.draggingPointIndex];
     mapDataPoint.point.setCoordinates(coordinate);
     if(this.draggingPointIndex !== 0) {
-      const previousMapDataPoint = this.patchPoints[this.draggingPointIndex-1]
+      const previousMapDataPoint = this.editorPoints[this.draggingPointIndex-1]
       mapDataPoint.data.distance = getDistance(toLonLat(previousMapDataPoint.point.getCoordinates()), toLonLat(coordinate));
       mapDataPoint.data.totalDistance = previousMapDataPoint.data.totalDistance + mapDataPoint.data.distance;
     }
-    if(this.draggingPointIndex < this.patchPoints.length - 1) {
-      const nextMapDataPoint = this.patchPoints[this.draggingPointIndex+1];
+    if(this.draggingPointIndex < this.editorPoints.length - 1) {
+      const nextMapDataPoint = this.editorPoints[this.draggingPointIndex+1];
       nextMapDataPoint.data.distance = getDistance(toLonLat(mapDataPoint.point.getCoordinates()), toLonLat(nextMapDataPoint.point.getCoordinates()));
     }
     this.updateTotalDistances(this.draggingPointIndex);
@@ -293,46 +293,46 @@ export class RunPatcher {
    * Update all visual content
    */
   private updateDisplay() {
-    this.setPatchPath(this.patchPoints);
+    this.setEditorPath(this.editorPoints);
     this.setPreviousPointStyle();
     this.setDistanceText();
   }
 
-  private setPatchPath(points: MapDataPoint[]) {
-    let coords = this.patchPoints.map(item => item.point.getCoordinates());
-    this.patchLineFeature.getGeometry().setCoordinates(coords);
-    this.patchPointsLayerSource.clear();
-    this.patchPointsLayerSource.addFeatures(
-      this.patchPoints.map(item => {
+  private setEditorPath(points: MapDataPoint[]) {
+    let coords = this.editorPoints.map(item => item.point.getCoordinates());
+    this.editorLineFeature.getGeometry().setCoordinates(coords);
+    this.editorPointsLayerSource.clear();
+    this.editorPointsLayerSource.addFeatures(
+      this.editorPoints.map(item => {
         let feature = new Feature({geometry: item.point});
-        feature.setStyle(PATCH_POINTS_STYLE);
+        feature.setStyle(EDITOR_POINTS_STYLE);
         return feature;
       })
     );
   }
 
   private setPreviousPointStyle() {
-    this.patchPointsLayerSource.forEachFeature((f: Feature<Geometry>) => {
-      if(<Point> f.getGeometry() === this.patchPoints[this.previousPointIndex].point)
-        f.setStyle(PATCH_POINTS_PREVIOUS_STYLE);
-      else if(f.getStyle() !== PATCH_POINTS_STYLE)
-        f.setStyle(PATCH_POINTS_STYLE);
+    this.editorPointsLayerSource.forEachFeature((f: Feature<Geometry>) => {
+      if(<Point> f.getGeometry() === this.editorPoints[this.previousPointIndex].point)
+        f.setStyle(EDITOR_POINTS_PREVIOUS_STYLE);
+      else if(f.getStyle() !== EDITOR_POINTS_STYLE)
+        f.setStyle(EDITOR_POINTS_STYLE);
     });
   }
 
   private setDistanceText() {
-    const distance = this.patchPoints[this.patchPoints.length-1]?.data.totalDistance || 0;
+    const distance = this.editorPoints[this.editorPoints.length-1]?.data.totalDistance || 0;
     document.getElementById('distance-km').textContent = (distance/1000).toString();
     document.getElementById('distance-miles').textContent = (distance/1609.344).toString();
   }
 
-  private initPatcher() {
-    this.patchPoints = [];
+  private initEditor() {
+    this.editorPoints = [];
     this.previousPointIndex = -1;
   }
 
-  private cancelPatcher(): boolean {
-    this.resetPatcher();
+  private cancelEditor(): boolean {
+    this.resetEditor();
     return true;
   }
 
@@ -355,7 +355,7 @@ export class RunPatcher {
       trkElement.appendChild(xmlDoc.createElement('type')).textContent = '9';
     }
     const trksegElement: Element = trkElement.appendChild(xmlDoc.createElement('trkseg'));
-    for(const mapDataPoint of this.patchPoints) {
+    for(const mapDataPoint of this.editorPoints) {
       const trkptElement: Element = trksegElement.appendChild(xmlDoc.createElement('trkpt'));
       const coordinates = toLonLat(mapDataPoint.point.getCoordinates());
       trkptElement.setAttribute('lat', coordinates[1].toString());
@@ -372,7 +372,7 @@ export class RunPatcher {
 
 }
 
-const app = new RunPatcher();
+const app = new RouteMaker();
 
 const formElement = document.getElementById('export') as HTMLFormElement;
 formElement.addEventListener('submit', (ev: Event) => {
