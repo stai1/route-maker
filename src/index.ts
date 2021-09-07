@@ -104,20 +104,23 @@ export class RunPatcher {
     this.patchPoints = [];
     this.previousPointIndex = null;
     this.draggingPointIndex = null;
-    this.setPatchPath(this.patchPoints);
+    this.updateDisplay();
   }
 
   private setInteractions() {
     let controlInteractions = {
       patcher: {
         click: (e: MapBrowserEvent<MouseEvent>) => {
-          this.map.forEachFeatureAtPixel(e.pixel, (f) => {
-            if(this.patchPointsLayerSource.hasFeature(f as Feature<Geometry>)) {
-              this.previousPointIndex = this.patchPoints.findIndex(item => item.point === <Point> f.getGeometry());
-              return true;
-            }
-          });
-          this.addPoint(e.coordinate);
+          let coordinate = e.coordinate;
+          if(e.originalEvent.ctrlKey) {
+            this.map.forEachFeatureAtPixel(e.pixel, (f) => {
+              if(this.patchPointsLayerSource.hasFeature(f as Feature<Geometry>)) {
+                coordinate = (<Point> f.getGeometry()).getCoordinates();
+                return true;
+              }
+            });
+          }
+          this.addPoint(coordinate);
         },
         dblclick: (e: MapBrowserEvent<MouseEvent>) => {
           e.stopPropagation();
@@ -126,14 +129,16 @@ export class RunPatcher {
           this.removePreviousPoint();
         },
         pointerdown: (e: MapBrowserEvent<MouseEvent>) => {
-          this.map.forEachFeatureAtPixel(e.pixel, (f) => {
-            if(this.patchPointsLayerSource.hasFeature(f as Feature<Geometry>)) {
-              this.previousPointIndex = this.patchPoints.findIndex(item => item.point === <Point> f.getGeometry());
-              this.draggingPointIndex = this.previousPointIndex;
-              this.setPreviousPointStyle();
-              return true;
-            }
-          });
+          if(!e.originalEvent.ctrlKey) { // ctrlKey to allow adding point on another point
+            this.map.forEachFeatureAtPixel(e.pixel, (f) => {
+              if(this.patchPointsLayerSource.hasFeature(f as Feature<Geometry>)) {
+                this.previousPointIndex = this.patchPoints.findIndex(item => item.point === <Point> f.getGeometry());
+                this.draggingPointIndex = this.previousPointIndex;
+                this.setPreviousPointStyle();
+                return true;
+              }
+            });
+          }
         },
         pointerup: (e: MapBrowserEvent<MouseEvent>) => {
           if(this.draggingPointIndex != null) {
@@ -144,7 +149,16 @@ export class RunPatcher {
         pointerdrag: (e: MapBrowserEvent<MouseEvent>) => {
           if(this.draggingPointIndex != null) {
             e.stopPropagation();
-            this.moveDraggingPoint(e.coordinate);
+            let coordinate = e.coordinate;
+            if(e.originalEvent.ctrlKey) {
+              this.map.forEachFeatureAtPixel(e.pixel, (f) => {
+                if(this.patchPointsLayerSource.hasFeature(f as Feature<Geometry>) && <Point> f.getGeometry() !== this.patchPoints[this.draggingPointIndex].point) {
+                  coordinate = (<Point> f.getGeometry()).getCoordinates();
+                  return true;
+                }
+              });
+            }
+            this.moveDraggingPoint(coordinate);
           }
         }
       }
@@ -168,19 +182,6 @@ export class RunPatcher {
     this.map.on('pointerdrag', (e: MapBrowserEvent<MouseEvent>) => {
       controlInteractions.patcher.pointerdrag?.(e);
     });
-  }
-
-  private setPatchPath(points: MapDataPoint[]) {
-    let coords = this.patchPoints.map(item => item.point.getCoordinates());
-    this.patchLineFeature.getGeometry().setCoordinates(coords);
-    this.patchPointsLayerSource.clear();
-    this.patchPointsLayerSource.addFeatures(
-      this.patchPoints.map(item => {
-        let feature = new Feature({geometry: item.point});
-        feature.setStyle(PATCH_POINTS_STYLE);
-        return feature;
-      })
-    );
   }
 
   /**
@@ -227,8 +228,7 @@ export class RunPatcher {
     this.previousPointIndex += 1;
     this.updateTotalDistances(this.previousPointIndex);
     if(render) {
-      this.setPatchPath(this.patchPoints);
-      this.setPreviousPointStyle();
+      this.updateDisplay();
     }
   }
 
@@ -257,8 +257,7 @@ export class RunPatcher {
       }
     }
     if(render) {
-      this.setPatchPath(this.patchPoints);
-      this.setPreviousPointStyle();
+      this.updateDisplay();
     }
   }
 
@@ -281,9 +280,30 @@ export class RunPatcher {
     }
     this.updateTotalDistances(this.draggingPointIndex);
     if(render) {
-      this.setPatchPath(this.patchPoints);
-      this.setPreviousPointStyle();
+      this.updateDisplay();
     }
+  }
+
+  /**
+   * Update all visual content
+   */
+  private updateDisplay() {
+    this.setPatchPath(this.patchPoints);
+    this.setPreviousPointStyle();
+    this.setDistanceText();
+  }
+
+  private setPatchPath(points: MapDataPoint[]) {
+    let coords = this.patchPoints.map(item => item.point.getCoordinates());
+    this.patchLineFeature.getGeometry().setCoordinates(coords);
+    this.patchPointsLayerSource.clear();
+    this.patchPointsLayerSource.addFeatures(
+      this.patchPoints.map(item => {
+        let feature = new Feature({geometry: item.point});
+        feature.setStyle(PATCH_POINTS_STYLE);
+        return feature;
+      })
+    );
   }
 
   private setPreviousPointStyle() {
@@ -295,9 +315,14 @@ export class RunPatcher {
     });
   }
 
+  private setDistanceText() {
+    const distance = this.patchPoints[this.patchPoints.length-1]?.data.totalDistance || 0;
+    document.getElementById('distance-km').textContent = (distance/1000).toString();
+    document.getElementById('distance-miles').textContent = (distance/1609.344).toString();
+  }
 
   private initPatcher() {
-    this.patchPoints = []
+    this.patchPoints = [];
     this.previousPointIndex = -1;
   }
 
