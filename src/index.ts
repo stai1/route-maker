@@ -107,7 +107,7 @@ export class RouteMaker {
 
   private resetEditor() {
     this.editorPoints = [];
-    this.previousPointIndex = null;
+    this.previousPointIndex = -1;
     this.draggingPointIndex = null;
     this.updateDisplay();
   }
@@ -354,6 +354,38 @@ export class RouteMaker {
     return true;
   }
 
+  public loadGPX(fileContents: string) {
+    const domParser = new DOMParser();
+    const xmlDoc = domParser.parseFromString(fileContents, 'text/xml');
+    const name = xmlDoc.getElementsByTagName('metadata')[0]?.getElementsByTagName('name')[0]?.textContent;
+    const formElement = document.getElementById('export') as HTMLFormElement;
+
+    const oldPoints = this.editorPoints;
+    const oldPreviousPointIndex = this.previousPointIndex;
+    const oldName: string = formElement.elements['name'].value;
+    try {
+      this.resetEditor();
+      for(const trkpt of xmlDoc.getElementsByTagName('trkpt')) {
+        this.addPoint(
+          fromLonLat([parseFloat(trkpt.getAttribute('lon')), parseFloat(trkpt.getAttribute('lat'))]),
+          false
+        );
+      }
+  
+      formElement.elements['name'].value = name;
+  
+      this.updateDisplay();
+      this.map.getView().fit(this.editorLineLayerSource.getExtent()); 
+    }
+    catch(error) {
+      this.editorPoints = oldPoints;
+      this.previousPointIndex = oldPreviousPointIndex;
+      formElement.elements['name'].value = oldName;
+      this.updateDisplay();
+      alert("File import failed");
+    }
+  }
+
   public createGPX(options: ExportOptions): string {
     const timeRegex = /(.*)\..*?Z/;
 
@@ -394,7 +426,21 @@ const app = new RouteMaker();
 
 document.getElementById('reverse').addEventListener('click', () => {
   app.reversePath();
-})
+});
+
+document.getElementById('import').addEventListener('click', () => {
+  document.getElementById('import-input').click();
+});
+
+const importInput = document.getElementById('import-input') as HTMLInputElement;
+importInput.addEventListener('change', (event) =>{
+  const reader = new FileReader();
+  reader.onload = event => {
+    app.loadGPX(event.target.result as string);
+  };
+  reader.readAsText((<HTMLInputElement> event.target).files[0]);
+});
+
 const formElement = document.getElementById('export') as HTMLFormElement;
 formElement.addEventListener('submit', (ev: Event) => {
   const options = {
