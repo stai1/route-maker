@@ -326,6 +326,24 @@ export class RouteMaker {
     document.getElementById('distance-miles').textContent = (distance/1609.344).toString();
   }
 
+  public reversePath() {
+    const reversed: MapDataPoint[] = [];
+    for(let i = this.editorPoints.length - 1; i >= 0; --i) {
+      reversed.push(this.editorPoints[i]);
+    }
+    reversed[0].data.distance = 0;
+    reversed[0].data.totalDistance = 0;
+    for(let i = 1; i < reversed.length; ++i) {
+      const previousMapDataPoint = reversed[i-1];
+      const mapDataPoint = reversed[i];
+      mapDataPoint.data.distance = getDistance(toLonLat(previousMapDataPoint.point.getCoordinates()), toLonLat(mapDataPoint.point.getCoordinates()));
+      mapDataPoint.data.totalDistance = previousMapDataPoint.data.totalDistance + mapDataPoint.data.distance;
+    }
+    this.editorPoints = reversed;
+    this.previousPointIndex = this.editorPoints.length - 1 - this.previousPointIndex;
+    this.updateDisplay();
+  }
+
   private initEditor() {
     this.editorPoints = [];
     this.previousPointIndex = -1;
@@ -374,6 +392,9 @@ export class RouteMaker {
 
 const app = new RouteMaker();
 
+document.getElementById('reverse').addEventListener('click', () => {
+  app.reversePath();
+})
 const formElement = document.getElementById('export') as HTMLFormElement;
 formElement.addEventListener('submit', (ev: Event) => {
   const options = {
