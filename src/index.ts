@@ -13,6 +13,7 @@ import { Style, Stroke, Circle, Fill} from 'ol/style';
 interface ExportOptions {
   name: string;
   bogusTime: boolean;
+  start?: Date;
 }
 
 interface MapDataPoint {
@@ -72,7 +73,7 @@ export class RouteMaker {
   constructor() {
     let mapSource = new OSM();
     let ele = document.createElement('div');
-    ele.textContent = "abc";
+    ele.textContent = 'abc';
 
     this.map = new Map({
       target: 'map',
@@ -382,7 +383,7 @@ export class RouteMaker {
       this.previousPointIndex = oldPreviousPointIndex;
       formElement.elements['name'].value = oldName;
       this.updateDisplay();
-      alert("File import failed");
+      alert('File import failed');
     }
   }
 
@@ -391,7 +392,7 @@ export class RouteMaker {
 
     const xmlDoc = document.implementation.createDocument(null, 'gpx', null);
     const gpxElement: Element = xmlDoc.documentElement;
-    let time = new Date();
+    let time = options.start || new Date();
     time.setMilliseconds(0);
     if(options.bogusTime) {
       gpxElement
@@ -443,16 +444,27 @@ importInput.addEventListener('change', (event) =>{
 
 const formElement = document.getElementById('export') as HTMLFormElement;
 formElement.addEventListener('submit', (ev: Event) => {
-  const options = {
+  const options: ExportOptions = {
     bogusTime: formElement.elements['bogus-time'].checked as boolean,
+    start: formElement.elements['start'].value ? new Date(formElement.elements['start'].value) : null,
     name: formElement.elements['name'].value as string,
   };
   console.log(options);
 
-  const blob = new Blob([app.createGPX(options)], {type: "octet/stream"});
+  const blob = new Blob([app.createGPX(options)], {type: 'octet/stream'});
 
   const downloadElement = document.getElementById('download') as HTMLAnchorElement;
   downloadElement.href = window.URL.createObjectURL(blob);
   downloadElement.download = (options.name || 'route') + '.gpx';
   downloadElement.click();
+});
+
+(<HTMLInputElement> document.getElementsByName('bogus-time')[0]).addEventListener('change', function() {
+  console.log(this.checked);
+  if(this.checked) {
+    document.getElementById('start-container').classList.remove('hidden');
+  }
+  else {
+    document.getElementById('start-container').classList.add('hidden');
+  }
 });

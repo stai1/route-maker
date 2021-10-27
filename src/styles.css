@@ -20,6 +20,10 @@ body {
   width: 300px;
 }
 
+.hidden {
+  display: none;
+}
+
 .ol-mouse-position {
   --stroke-color:white;
   --stroke-width:1px;
