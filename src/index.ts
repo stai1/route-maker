@@ -118,7 +118,7 @@ export class RouteMaker {
       editor: {
         click: (e: MapBrowserEvent<MouseEvent>) => {
           let coordinate = e.coordinate;
-          if(e.originalEvent.ctrlKey) {
+          if(e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
             this.map.forEachFeatureAtPixel(e.pixel, (f) => {
               if(this.editorPointsLayerSource.hasFeature(f as Feature<Geometry>)) {
                 coordinate = (<Point> f.getGeometry()).getCoordinates();
@@ -135,7 +135,7 @@ export class RouteMaker {
           this.removePreviousPoint();
         },
         pointerdown: (e: MapBrowserEvent<MouseEvent>) => {
-          if(!e.originalEvent.ctrlKey) { // ctrlKey to allow adding point on another point
+          if(!(e.originalEvent.ctrlKey || e.originalEvent.metaKey)) { // ctrlKey/metaKey to allow adding point on another point
             this.map.forEachFeatureAtPixel(e.pixel, (f) => {
               if(this.editorPointsLayerSource.hasFeature(f as Feature<Geometry>)) {
                 this.previousPointIndex = this.editorPoints.findIndex(item => item.point === <Point> f.getGeometry());
@@ -156,7 +156,7 @@ export class RouteMaker {
           if(this.draggingPointIndex != null) {
             e.stopPropagation();
             let coordinate = e.coordinate;
-            if(e.originalEvent.ctrlKey) {
+            if(e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
               this.map.forEachFeatureAtPixel(e.pixel, (f) => {
                 if(this.editorPointsLayerSource.hasFeature(f as Feature<Geometry>) && <Point> f.getGeometry() !== this.editorPoints[this.draggingPointIndex].point) {
                   coordinate = (<Point> f.getGeometry()).getCoordinates();
