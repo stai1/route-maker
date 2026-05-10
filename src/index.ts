@@ -1,9 +1,10 @@
 import 'ol/ol.css';
 import { OSM } from 'ol/source';
+import Geolocation from 'ol/Geolocation';
 import { Map, View, Feature, MapBrowserEvent } from 'ol';
-import { MousePosition, ScaleLine, ZoomToExtent, defaults } from 'ol/control';
+import { Control, MousePosition, ScaleLine, defaults } from 'ol/control';
 import { Coordinate, createStringXY } from 'ol/coordinate';
-import { Geometry, LineString, Point } from 'ol/geom'
+import { Geometry, LineString, Point, Polygon } from 'ol/geom'
 import { Tile , Vector } from 'ol/layer';
 import VectorSource from 'ol/source/Vector';
 import { fromLonLat, toLonLat } from 'ol/proj';
@@ -24,6 +25,38 @@ interface MapDataPoint {
 interface DataPoint {
   distance: number;
   totalDistance: number;
+}
+
+function recenterOnLocation(view: View, geolocation: Geolocation) {
+  view.setCenter(geolocation.getPosition());
+  view.setZoom(16);
+}
+
+class GeolocateControl extends Control {
+  constructor(geolocation: Geolocation) {
+    const button = document.createElement('button');
+    button.innerHTML = '⦿';
+    button.title = 'Center on current location';
+
+    const element = document.createElement('div');
+    element.className = 'ol-geolocate ol-unselectable ol-control';
+    element.appendChild(button);
+
+    super({ element });
+
+    button.addEventListener('click', () => {
+      if (geolocation.getPosition()) {
+        recenterOnLocation(this.getMap().getView(), geolocation);
+      } else {
+        geolocation.once('change:position', () => recenterOnLocation(this.getMap().getView(), geolocation));
+        geolocation.setTracking(true);
+      }
+    });
+  }
+
+  setVisible(visible: boolean) {
+    this.element.classList.toggle('hidden', !visible);
+  }
 }
 
 const EDITOR_LINE_STYLE = new Style({
@@ -56,13 +89,27 @@ const EDITOR_POINTS_PREVIOUS_STYLE = new Style({
     })
   })
 });
+const LOCATION_POSITION_STYLE = new Style({
+  image: new Circle({
+    radius: 7,
+    fill: new Fill({ color: '#4285f4' }),
+    stroke: new Stroke({ color: '#ffffff', width: 2 })
+  })
+});
+const LOCATION_ACCURACY_STYLE = new Style({
+  fill: new Fill({ color: 'rgba(66, 133, 244, 0.15)' }),
+  stroke: new Stroke({ color: 'rgba(66, 133, 244, 0.5)', width: 1 })
+});
 export class RouteMaker {
 
   routeLayerSource = new VectorSource({wrapX: true});
   selectedLayerSource = new VectorSource({wrapX: true});
   editorLineLayerSource = new VectorSource({wrapX: true});
   editorPointsLayerSource = new VectorSource({wrapX: true});
+  locationLayerSource = new VectorSource({wrapX: true});
 
+  locationAccuracyFeature: Feature<Polygon> = new Feature<Polygon>();
+  locationPositionFeature: Feature<Point> = new Feature<Point>();
 
   editorLineFeature: Feature<LineString> = new Feature<LineString>({geometry: new LineString([])});
   editorPoints: MapDataPoint[];
@@ -75,6 +122,12 @@ export class RouteMaker {
     let ele = document.createElement('div');
     ele.textContent = 'abc';
 
+    const geolocation = new Geolocation({
+      trackingOptions: { enableHighAccuracy: true },
+      projection: 'EPSG:3857',
+    });
+    const geolocateControl = new GeolocateControl(geolocation);
+
     this.map = new Map({
       target: 'map',
       controls: defaults().extend([
@@ -83,20 +136,59 @@ export class RouteMaker {
           projection: 'EPSG:4326',
         }),
         new ScaleLine(),
-        new ZoomToExtent(),
+        geolocateControl,
       ]),
       layers: [
         new Tile({source: mapSource}),
+        new Vector({ source: this.locationLayerSource}),
         new Vector({ source: this.routeLayerSource}),
         new Vector({ source: this.selectedLayerSource}),
         new Vector({ source: this.editorLineLayerSource}),
         new Vector({ source: this.editorPointsLayerSource})
       ],
-      view: new View({
-        center: fromLonLat([-121.961, 37.55]),
-        zoom: 16,
-      }),
+      view: new View(),
     });
+    const view = this.map.getView();
+    view.fit(view.getProjection().getExtent());
+
+    this.locationAccuracyFeature.setStyle(LOCATION_ACCURACY_STYLE);
+    this.locationPositionFeature.setStyle(LOCATION_POSITION_STYLE);
+    this.locationLayerSource.addFeatures([this.locationAccuracyFeature, this.locationPositionFeature]);
+
+    geolocation.on('change:position', () => {
+      const coords = geolocation.getPosition();
+      if (coords) this.locationPositionFeature.setGeometry(new Point(coords));
+    });
+    geolocation.on('change:accuracyGeometry', () => {
+      this.locationAccuracyFeature.setGeometry(geolocation.getAccuracyGeometry());
+    });
+
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: 'geolocation' }).then((status) => {
+        if (status.state === 'granted') {
+          geolocation.once('change:position', () => recenterOnLocation(view, geolocation));
+        }
+        const apply = () => {
+          geolocateControl.setVisible(status.state !== 'denied');
+          switch (status.state) {
+            case 'granted':
+              geolocation.setTracking(true);
+              break;
+            case 'prompt':
+              geolocation.setTracking(false);
+              break;
+            case 'denied':
+              geolocation.setTracking(false);
+              this.locationPositionFeature.setGeometry(undefined);
+              this.locationAccuracyFeature.setGeometry(undefined);
+              break;
+          }
+        };
+        apply();
+        status.addEventListener('change', apply);
+      });
+    }
+
     this.editorLineFeature.setStyle(EDITOR_LINE_STYLE);
     this.editorLineLayerSource.addFeature(this.editorLineFeature);
 

@@ -24,6 +24,15 @@ body {
   display: none;
 }
 
+.ol-geolocate {
+  top: 4.643em;
+  left: .5em;
+}
+
+.ol-touch .ol-geolocate {
+  top: 5.5em;
+}
+
 .ol-mouse-position {
   --stroke-color:white;
   --stroke-width:1px;
